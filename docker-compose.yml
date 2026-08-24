@@ -1,87 +1,159 @@
 services:
+# serviço do MySQL, aqui estanmos definindo o nome do serviço como MySQL
+# note que para cpmfigurar o serviço do mysql foi alicado uma indentação
+#  e o nome da imagem, etsmaos definindo a imagem em sua ultima versão(latest)
+# container_name (nome do container), restart (reinicia o container caso ele pare de funcionar)
+# command (comandos de configuração do mysql), environment (variáveis de ambiente para configuração do mysql)
   mysql:
     image: mysql:latest
     container_name: srv-mysql
     restart: unless-stopped
-    command: 
+
+    # comandos que serão utilizados para as ferramentas de métricas
+    command:
+
+      # permite o acesso aos schemas(db do mysql)
       - --performance-schema=ON
+
+      #  permite obter as métricas de query(consultas) lentas(sow)
       - --slow-query-log=ON
+
+      # define quanto tempo irá esperar para obter as métricas de queries lentas
       - --long-query-time=1
+
+      # Obter as métricas de queries que não usam indices(chaves)
       - --log-queries-not-using-indexes=ON
+
+      # permite o acesso e monitoramento das bases que não são do engine innodb
       - --innodb-monitor-enable=all
+
+    # definição das variáveis de ambiente para configuração do mysql( com letras maiúsculas)
     environment:
       MYSQL_ROOT_PASSWORD: 123senac
       MYSQL_DATABASE: dbprodutos
       MYSQL_USER: senac
       MYSQL_PASSWORD: 123senac
+
+    # portas de acesso ao mysql, a porta 3306 é a porta padrão do mysql, a porta 5030 é 
+    # a porta que será utilizada para acessar o mysql fora do container
     ports:
       - "5030:3306"
+
+    # volume de dados do mysql, para que os dados não sejam perdidos caso o container seja parado
     volumes:
       - mysql_data:/var/lib/mysql
+    
+    # healthcheck é uma verificação de saúde do serviço, que verifica se o mysql está funcionando corretamente
     healthcheck:
       test: ["CMD", "mysqladmin","ping","-h", "localhost","-p123senac"]
+
+      #  intervalo de tempo entre as verificações de saúde, aqui está definido para 10 segundos
       interval: 10s
+
+      # tempo limite para a verificação de saúde, aqui está definido para 5 segundos
       timeout: 5s
+
+      # número de tentativas antes de considerar o serviço como não saudável, aqui está definido para 15 tentativas
       retries: 15
+
+    # rede de comunicação entre os serviços, aqui está definido para a rede monitoring
     networks:
       - monitoring
   
+  # serviço do mysqld-exporter, que é uma ferramenta que coleta métricas do mysql e as disponibiliza para o prometheus
   mysqld-exporter:
     image: prom/mysqld-exporter:v0.19.0
     container_name: mysqld-exporter
+
+    # reinicia o container caso ele pare de funcionar, a opção unless-stopped significa que 
+    #  o container será reiniciado a menos que seja parado manualmente
     restart: unless-stopped
     command: 
-      - "--mysqld.address=mysql:3306"
-      - "--mysqld.username=senac"
-      - "--collect.mysql.user"
-      - "--collect.info_schema.processlist"
-      - "--collect.info_schema.tables"
-      - "--collect.info_schema.innodb_metrics"
-      - "--collect.info_schema.innodb_tablespaces"
-      - "--collect.perf_schema.eventsstatements"
-      - "--collect.perf_schema.eventswaits"
-      - "--collect.perf_schema.file_events"
-      - "--collect.perf_schema.file_instances"
-      - "--collect.perf_schema.indexiowaits"
-      - "--collect.perf_schema.memory_events"
-      - "--collect.perf_schema.tableiowaits"
-      - "--collect.perf_schema.tablelocks"
-      - "--collect.engine_innodb_status"
+      - "--mysqld.address=mysql:3306" # Define o serviço e porta de comunicação
+      - "--mysqld.username=senac" # usuario para ter acesso as métricas do mysql
+      - "--collect.mysql.user" # coletar dados referente ao usuario
+      - "--collect.info_schema.processlist" # coletas dados de processos ativos: conexões, queries, etc
+      - "--collect.info_schema.tables" # coleta dados de tabelas: tamanho, quantidade de linhas, etc
+      - "--collect.info_schema.innodb_metrics" # coleta dados de métricas do InnoDB
+      - "--collect.info_schema.innodb_tablespaces" # coleta dados de tablespace do InnoDB
+      - "--collect.perf_schema.eventsstatements" # coleta dados de eventos de declarações
+      - "--collect.perf_schema.eventswaits" # coleta dados de eventos de espera
+      - "--collect.perf_schema.file_events" # coleta dados de eventos de arquivo
+      - "--collect.perf_schema.file_instances" # coleta dados de instâncias de arquivo
+      - "--collect.perf_schema.indexiowaits" # coleta dados de espera de I/O de índice
+      - "--collect.perf_schema.memory_events" # coleta dados de eventos de memória
+      - "--collect.perf_schema.tableiowaits" # coleta dados de espera de I/O de tabela
+      - "--collect.perf_schema.tablelocks" # coleta dados de bloqueios de tabela
+      - "--collect.engine_innodb_status" # coleta dados de status do InnoDB
+
+    # exposição da porta 9104 para acesso as métricas do mysqld-exporter
+    # a porta 9104 é a porta padrão do mysqld-exporter
     ports:
       - "9104:9104"
     
+    # variável de ambiente para configuração da senha do usuário do mysql, 
+    #  que será utilizada pelo mysqld-exporter para acessar as métricas do mysql
     environment:
       MYSQLD_EXPORTER_PASSWORD: 123senac
+
+    # dependência do serviço do mysql, ou seja, o mysqld-exporter 
+    # só será iniciado após o mysql estar saudável
     depends_on:
       mysql:
         condition: service_healthy
+
     networks:
       - monitoring
 
+  # serviço do Prometheus, que é uma ferramenta de monitoramento e alerta de métricas
   prometheus:
     image: prom/prometheus:v3.5.0
     container_name: prometheus
     restart: always
     command: 
+      # define o arquivo de configuração do Prometheus, que 
+      # está sendo montado a partir do arquivo prometheus.yml
       - "--config.file=/etc/prometheus/prometheus.yml"
+
+      # define o tempo de retenção dos dados coletados pelo 
+      # Prometheus, aqui está definido para 15 dias
       - "--storage.tsdb.retention.time=15d"
+
+    # dependência dos serviços do mysql, mysqld-exporter e cadvisor, ou seja, 
+    # o Prometheus só será iniciado após esses serviços estarem saudáveis
     depends_on:
       - mysql
       - mysqld-exporter
       - cadvisor
+
+    # exposição da porta 9090 para acesso ao Prometheus
+    # a porta 9090 é a porta padrão do Prometheus
     ports:
       - "9090:9090"
+
+    # montagem dos volumes de configuração e dados do Prometheus
     volumes:
+      # monta o arquivo de configuração do Prometheus, que está sendo
+      # montado a partir do arquivo prometheus.yml
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+      # monta o volume de dados do Prometheus, que será utilizado 
+      # para armazenar os dados coletados
       - prometheus_data:/prometheus
+
     networks:
       - monitoring
   
+  # serviço do cAdvisor, que é uma ferramenta de monitoramento de containers Docker
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.52.1
     container_name: cadvisor
     restart: unless-stopped
+
+    # permite que o cAdvisor tenha acesso a informações do 
+    # sistema operacional e dos containers Docker
     privileged: true
+
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro

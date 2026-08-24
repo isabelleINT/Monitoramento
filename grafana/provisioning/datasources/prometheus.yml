@@ -1,8 +1,35 @@
+
+# Este arquivo será lido pelo docker compose e monatado a partirda linha linha de comandos
+#/etc/grafana/provisioning dentro do container do Grafana
+
+
+# o Grafana lẽ automaticamente todos os arquivos YAML desta pasta na inicialização do container
+# grafana e, cria/autualizade os destaques definidos, sem a necessidade de configuração manual
+# pela interface web do Grafana.
+
+
+# apiVersion: 1 é a versão do formato de arquivo de provisionamento do Grafana.
 apiVersion: 1
+
+# datasource é a origem dos dados, ou seja, é de onde viram as métricas para serem exibidas no dashboard
 datasources:
+
+  # nome que aparece na lista de datasouces dentro do grafana
   - name: Prometheus
+
+    # tipo de datasource(plugin nativo do Grafana)
     type: prometheus
+
+    # modo proxy, as requisições passam pelo backend do Grafana, o usuário acessa os dados de métricas
+    # via dashboard do Grafana sem ter acesso ap Prometheus
     access: proxy
+
+    # endereço de conexão do prometheus com o Grafana. Aqui está snendo usado o nome de serviço do docker
+    #  criado para o prometheus
     url: http://localhost:9090
+
+    # Define este datasource como padrão ao criar novos datasources dentro do Grafana
     isDefault: true
+
+    # indica que este datasource é editavel manualmente. Podemos alterar as configurações dentro do Grafana
     editable: true
